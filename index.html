@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="creator" content="Nandana Mihindukulasooriya">
+    <title>Tools for the Semantic Web</title>
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.10.24/css/jquery.dataTables.css">
+    <script type="text/javascript" charset="utf8" src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.10.24/js/jquery.dataTables.js"></script>
+</head>
+<body>
+
+<h1>Semantic Web Tools</h1>
+
+<h1 id="tripleStoreHeader">Triplesores</h1>
+
+<table id="tripleStoreTable">
+    <thead>
+        <tr>
+            <th>Wikidata</th>
+            <th>Triple Store</th>
+            <th>Developers</th>
+            <th>Website</th>
+            <th>Code repo</th>
+            <th>License</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<h1 id="reasonerHeader">Semantic Reasoners </h1>
+
+<table id="reasonerTable">
+    <thead>
+        <tr>
+            <th>Wikidata</th>
+            <th>Reasoner</th>
+            <th>Developers</th>
+            <th>Website</th>
+            <th>Code repo</th>
+            <th>License</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<script>
+async function fetchWikidata(query) {
+    const endpointUrl = 'https://query.wikidata.org/sparql';
+    const headers = new Headers({
+        'Accept': 'application/json'
+    });
+
+    const response = await fetch(endpointUrl + '?query=' + encodeURIComponent(query), { headers });
+    const data = await response.json();
+    return data.results.bindings;
+}
+
+function getWikidataQuery(tool_type_wd_id) {
+    const sparqlQuery = `
+        SELECT DISTINCT ?tool ?toolLabel ?codeRepo (GROUP_CONCAT(DISTINCT ?developerLabel; separator=", ") as ?developers) (GROUP_CONCAT(DISTINCT ?website; separator=", ") as ?websites)  (GROUP_CONCAT(DISTINCT ?licenseLabel; separator=", ") as ?licenses)
+        WHERE {
+          ?tool wdt:P31+/wdt:P279* wd:` + tool_type_wd_id + `; 
+                       rdfs:label ?toolLabel . 
+          
+          OPTIONAL { ?tool wdt:P178 ?developer . ?developer rdfs:label ?developerLabel FILTER(LANG(?developerLabel) = "en") } 
+          OPTIONAL { ?tool wdt:P1324 ?codeRepo. } 
+          OPTIONAL { ?tool wdt:P856 ?website. } 
+          OPTIONAL { ?tool wdt:P275 ?license . ?license rdfs:label ?licenseLabel FILTER(LANG(?licenseLabel) = "en")  } 
+          
+          FILTER(LANG(?toolLabel) = "en") 
+        }
+        GROUP BY ?tool ?toolLabel ?codeRepo
+        ORDER BY ?toolLabel
+    `;
+
+    return sparqlQuery
+
+}
+
+function populateTable(tool_wd_id, tool_type, table_id, header_id) {
+    const sparqlQuery = getWikidataQuery(tool_wd_id);
+    fetchWikidata(sparqlQuery)
+        .then(results => {
+            const stateTable = $(table_id).DataTable();
+
+            results.forEach(result => {
+                wd = result.tool.value;
+                wd_id = wd.replace('http://www.wikidata.org/entity/', '');
+                const wd_link = '<a href="' + wd + '">' + wd_id + '</a>'
+                const label = result.toolLabel.value;
+                const repo = result.codeRepo ? result.codeRepo.value : '-';
+                const developers = result.developers ? result.developers.value : '-';
+                const websites = result.websites ? result.websites.value : '-';
+                const licenses = result.licenses ? result.licenses.value : '-';
+
+                stateTable.row.add([wd_link, label, developers, websites, repo, licenses]).draw();
+            });
+            $(header_id).text(results.length + " " + tool_type + " found in Wikidata");
+        })
+        .catch(error => console.error('Error fetching data from Wikidata:', error));  
+}
+
+tool_specs = [
+    ['Q3539533', 'triple stores', '#tripleStoreTable', '#tripleStoreHeader'],
+    ['Q1341685', 'semantic reasoners', '#reasonerTable', '#reasonerHeader'],
+]
+
+tool_specs.forEach(function(tool) {
+  populateTable(tool[0], tool[1], tool[2], tool[3])
+});
+
+</script>
+
+</body>
+</html>
